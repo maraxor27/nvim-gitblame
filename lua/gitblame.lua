@@ -203,53 +203,41 @@ function M.setup(opts)
 
   -- vim.api.nvim.create_user_command("GitBlameShow", TODO, {})
 
-  if M.config.auto_show then
-    local group = vim.api.nvim_create_augroup("GitBlame", { clear = true })
-     
-    -- vim.api.nvim_create_autocmd({ "CursorHold" }, {
-    --   group = group,
-    --   callback = function() 
-    --     -- Only show blame in normal mode
-    --     if vim.api.nvim_get_mode().mode == "n" then
-    --       show_commit()
-    --     end
-    --   end
-    -- })
-   
-    vim.api.nvim_create_autocmd({ "CursorMoved" }, {
-      group = group,
-      callback = function()
-        -- Clear commit if one exists on another line
-        clear_commit()
+  local group = vim.api.nvim_create_augroup("GitBlame", { clear = true })
+ 
+  vim.api.nvim_create_autocmd({ "CursorMoved" }, {
+    group = group,
+    callback = function()
+      -- Clear commit if one exists on another line
+      clear_commit()
 
-        -- Start the timer for displaying a commit on the current line
-        delay_show_commit()
-      end
-    })
+      -- Start the timer for displaying a commit on the current line
+      delay_show_commit()
+    end
+  })
 
-    vim.api.nvim_create_autocmd({ "InsertEnter", "BufLeave" }, {
-      group = group,
-      callback = function() 
-        vim.api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
-      end
-    })
+  vim.api.nvim_create_autocmd({ "InsertEnter", "BufLeave" }, {
+    group = group,
+    callback = function() 
+      vim.api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
+    end
+  })
 
-    vim.api.nvim_create_autocmd({ "BufReadPost" }, {
-      group = group,
-      callback = function()
-        local filepath = vim.fn.expand("%:p") 
-        -- cache_lookup(filepath, 1)
-      end
-    })
+  vim.api.nvim_create_autocmd({ "BufReadPost" }, {
+    group = group,
+    callback = function()
+      local filepath = vim.fn.expand("%:p") 
+      -- cache_lookup(filepath, 1)
+    end
+  })
 
-    vim.api.nvim_create_autocmd({ "BufDelete" }, {
-      group = group,
-      callback = function()
-        local filepath = vim.fn.expand("<afile>:p") 
-        M.Cache[filepath] = nil
-      end
-    })
-  end
+  vim.api.nvim_create_autocmd({ "BufDelete" }, {
+    group = group,
+    callback = function()
+      local filepath = vim.fn.expand("<afile>:p") 
+      M.Cache[filepath] = nil
+    end
+  })
 end
 
 return M
