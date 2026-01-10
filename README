@@ -1,0 +1,3 @@
+# Gitblame
+
+A nvim extension for displaying git blame information per line of code.
