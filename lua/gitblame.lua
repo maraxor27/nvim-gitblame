@@ -58,14 +58,14 @@ local function parse_blame_info(output)
 
     local author = string.match(line, "^author (.+)")
     if author then
-      print(string.format("author: \"%s\"", author))
+      -- print(string.format("author: \"%s\"", author))
       current_commit["author"] = author
       goto continue
     end
 
     local author_mail = string.match(line, "^author%-mail %<(.+)%>")
     if author_mail then 
-      print(string.format("author-mail: \"%s\"", author_mail))
+      -- print(string.format("author-mail: \"%s\"", author_mail))
       current_commit["author_mail"] = author_mail
       goto continue
     end
@@ -73,14 +73,14 @@ local function parse_blame_info(output)
     local author_time = string.match(line, "^author%-time (%d+)")
     if author_time then
       local date = os.date(M.config.date_format, tonumber(author_time))
-      print(string.format("author_time: \"%s\"", date))
+      -- print(string.format("author_time: \"%s\"", date))
       current_commit["author_time"] = date 
       goto continue
     end
 
     local summary = string.match(line, "^summary (.+)")
     if summary then
-      print(string.format("summary: \"%s\"", summary))
+      -- print(string.format("summary: \"%s\"", summary))
       current_commit["summary"] = summary
       goto continue
     end
@@ -89,8 +89,12 @@ local function parse_blame_info(output)
   return lines
 end
 
-local function get_blame_info(filepath)
-  -- vim.cmd.echo(string.format('"filepath: %s"', filepath)) 
+local function get_blame_info(filepath) 
+  -- It is important to handle filepath being an empty string, because this case occurs with telescope :(
+  if filepath == "" then
+    return nil
+  end
+
   local handle = io.popen(string.format("git blame --porcelain %s", filepath))
   if not handle then
     return nil
@@ -107,6 +111,9 @@ local function cache_lookup(filepath, line_number)
   if not entry then
     vim.cmd.echo(string.format('"cache miss: %s:%d"', filepath, line_number))
     entry = get_blame_info(filepath)
+    if not entry then
+      return nil
+    end
     M.Cache[filepath] = entry
   else
     vim.cmd.echo(string.format('"cache hit: %s:%d"', filepath, line_number))
