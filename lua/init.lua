@@ -7,6 +7,7 @@ M.config = {
   date_format = "%Y-%m-%d %H:%M",
   format = " %a | %d | %m (%h)",
   max_msg_len = 50,
+  delay_show_commit = 500,
 }
 
 local function parse_blame_info(output)
@@ -49,37 +50,37 @@ local function parse_blame_info(output)
         error(line_number .. " is not a valid number")
       end
       
-      -- vim.cmd.echo(string.format('"Adding commit %s to %d"', existing_commit.hash, line_number))
+      vim.cmd.echo(string.format('"Adding commit %s to %d"', existing_commit.hash, line_number))
       lines[index] = existing_commit
 
       goto continue
     end
 
-    local author = string.match(line, "author (.+)")
+    local author = string.match(line, "^author (.+)")
     if author then
-      -- print(string.format("author: \"%s\"", author))
+      print(string.format("author: \"%s\"", author))
       current_commit["author"] = author
       goto continue
     end
 
-    local author_mail = string.match(line, "author%-mail %<(.+)%>")
+    local author_mail = string.match(line, "^author%-mail %<(.+)%>")
     if author_mail then 
-      -- print(string.format("author-mail: \"%s\"", author_mail))
+      print(string.format("author-mail: \"%s\"", author_mail))
       current_commit["author_mail"] = author_mail
       goto continue
     end
    
-    local author_time = string.match(line, "author%-time (%d+)")
+    local author_time = string.match(line, "^author%-time (%d+)")
     if author_time then
       local date = os.date(M.config.date_format, tonumber(author_time))
-      -- print(string.format("author_time: \"%s\"", date))
+      print(string.format("author_time: \"%s\"", date))
       current_commit["author_time"] = date 
       goto continue
     end
 
-    local summary = string.match(line, "summary (.+)")
+    local summary = string.match(line, "^summary (.+)")
     if summary then
-      -- print(string.format("summary: \"%s\"", summary))
+      print(string.format("summary: \"%s\"", summary))
       current_commit["summary"] = summary
       goto continue
     end
@@ -128,7 +129,7 @@ local function format_commit(commit)
   formatted = formatted:gsub("%%d", commit.author_time or "")
   formatted = formatted:gsub("%%m", msg)
   formatted = formatted:gsub("%%h", commit.hash and string.sub(commit.hash, 1, 7) or "")
-
+  print(formatted)
   return formatted
 end
 
@@ -153,6 +154,44 @@ end
 --
 local ns_id = nil
 
+local function show_commit()
+  vim.api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
+          
+  -- Get current buffer id 
+  local buffer_ID = vim.api.nvim_get_current_buf()
+  -- Get cursor of current window
+  local cursor = vim.api.nvim_win_get_cursor(CURRENT_WINDOW_ID)
+  -- cursor = [row, col]
+  local line_num = cursor[1]
+
+  local filepath = vim.fn.expand("%:p")   
+  local commit = cache_lookup(filepath, line_num) 
+  if not commit then 
+    -- vim.cmd.echo('"Couldn\'t find commit information"')
+    return
+  end
+  local formatted_text = format_commit(commit)
+  -- vim.cmd.echo(string.format('"blame: %s"', formatted_text))
+
+  vim.api.nvim_buf_set_virtual_text(buffer_ID, ns_id, line_num - 1, { { formatted_text, M.config.hl_group } }, {})
+end
+
+local auto_timer = nil
+local function delay_show_commit()
+  if auto_timer then
+    vim.loop.timer_stop(auto_timer)
+  end
+
+  auto_timer = vim.defer_fn(function()
+    show_commit()
+    auto_timer = nil
+  end, M.config.delay_show_commit)
+end
+
+local function clear_commit()
+  vim.api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
+end
+
 function M.setup(opts)
   -- Merge opts with config
   M.config = vim.tbl_deep_extend("force", M.config, opts or {})
@@ -166,35 +205,29 @@ function M.setup(opts)
 
   if M.config.auto_show then
     local group = vim.api.nvim_create_augroup("GitBlame", { clear = true })
-    vim.api.nvim_create_autocmd({ "CursorHold" }, {
+     
+    -- vim.api.nvim_create_autocmd({ "CursorHold" }, {
+    --   group = group,
+    --   callback = function() 
+    --     -- Only show blame in normal mode
+    --     if vim.api.nvim_get_mode().mode == "n" then
+    --       show_commit()
+    --     end
+    --   end
+    -- })
+   
+    vim.api.nvim_create_autocmd({ "CursorMoved" }, {
       group = group,
-      callback = function() 
-        -- Only show blame in normal mode
-        if vim.api.nvim_get_mode().mode == "n" then
-          vim.api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
-          
-          -- Get current buffer id 
-          local buffer_ID = vim.api.nvim_get_current_buf()
-          -- Get cursor of current window
-          local cursor = vim.api.nvim_win_get_cursor(CURRENT_WINDOW_ID)
-          -- cursor = [row, col]
-          local line_num = cursor[1]
+      callback = function()
+        -- Clear commit if one exists on another line
+        clear_commit()
 
-          local filepath = vim.fn.expand("%:p")   
-          local commit = cache_lookup(filepath, line_num) 
-          if not commit then 
-            -- vim.cmd.echo('"Couldn\'t find commit information"')
-            return
-          end
-          local formatted_text = format_commit(commit)
-          -- vim.cmd.echo(string.format('"blame: %s"', formatted_text))
-
-          vim.api.nvim_buf_set_virtual_text(buffer_ID, ns_id, line_num - 1, { { formatted_text, M.config.hl_group } }, {})
-        end
+        -- Start the timer for displaying a commit on the current line
+        delay_show_commit()
       end
     })
-    
-    vim.api.nvim_create_autocmd({ "CursorMoved", "InsertEnter", "BufLeave" }, {
+
+    vim.api.nvim_create_autocmd({ "InsertEnter", "BufLeave" }, {
       group = group,
       callback = function() 
         vim.api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
