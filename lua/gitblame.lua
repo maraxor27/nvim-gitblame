@@ -32,12 +32,12 @@ local function parse_blame_info(output)
 
     local commit = string.match(line, "^(%x+) %d+ %d+")
     local line_number = string.match(line, "^%x+ %d+ (%d+)")
-    if commit and line_number then 
+    if commit and line_number then
       -- print(string.format("commit: %s @ %s", commit, line_number))
-      
+
       local existing_commit = blame_info[commit]
 
-      if not existing_commit then 
+      if not existing_commit then
         existing_commit = {}
         existing_commit["hash"] = commit
         blame_info[commit] = existing_commit
@@ -49,7 +49,7 @@ local function parse_blame_info(output)
       if not index then
         error(line_number .. " is not a valid number")
       end
-      
+
       -- vim.cmd.echo(string.format('"Adding commit %s to %d"', existing_commit.hash, line_number))
       lines[index] = existing_commit
 
@@ -64,17 +64,17 @@ local function parse_blame_info(output)
     end
 
     local author_mail = string.match(line, "^author%-mail %<(.+)%>")
-    if author_mail then 
+    if author_mail then
       -- print(string.format("author-mail: \"%s\"", author_mail))
       current_commit["author_mail"] = author_mail
       goto continue
     end
-   
+
     local author_time = string.match(line, "^author%-time (%d+)")
     if author_time then
       local date = os.date(M.config.date_format, tonumber(author_time))
       -- print(string.format("author_time: \"%s\"", date))
-      current_commit["author_time"] = date 
+      current_commit["author_time"] = date
       goto continue
     end
 
@@ -89,7 +89,7 @@ local function parse_blame_info(output)
   return lines
 end
 
-local function get_blame_info(filepath) 
+local function get_blame_info(filepath)
   -- It is important to handle filepath being an empty string, because this case occurs with telescope :(
   if filepath == "" then
     return nil
@@ -136,7 +136,7 @@ local function format_commit(commit)
   formatted = formatted:gsub("%%d", commit.author_time or "")
   formatted = formatted:gsub("%%m", msg)
   formatted = formatted:gsub("%%h", commit.hash and string.sub(commit.hash, 1, 7) or "")
-  print(formatted)
+  -- print(formatted)
   return formatted
 end
 
@@ -163,17 +163,17 @@ local ns_id = nil
 
 local function show_commit()
   vim.api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
-          
-  -- Get current buffer id 
+
+  -- Get current buffer id
   local buffer_ID = vim.api.nvim_get_current_buf()
   -- Get cursor of current window
   local cursor = vim.api.nvim_win_get_cursor(CURRENT_WINDOW_ID)
   -- cursor = [row, col]
   local line_num = cursor[1]
 
-  local filepath = vim.fn.expand("%:p")   
-  local commit = cache_lookup(filepath, line_num) 
-  if not commit then 
+  local filepath = vim.fn.expand("%:p")
+  local commit = cache_lookup(filepath, line_num)
+  if not commit then
     -- vim.cmd.echo('"Couldn\'t find commit information"')
     return
   end
@@ -211,7 +211,7 @@ function M.setup(opts)
   -- vim.api.nvim.create_user_command("GitBlameShow", TODO, {})
 
   local group = vim.api.nvim_create_augroup("GitBlame", { clear = true })
- 
+
   vim.api.nvim_create_autocmd({ "CursorMoved" }, {
     group = group,
     callback = function()
@@ -225,7 +225,7 @@ function M.setup(opts)
 
   vim.api.nvim_create_autocmd({ "InsertEnter", "BufLeave" }, {
     group = group,
-    callback = function() 
+    callback = function()
       vim.api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
     end
   })
@@ -233,7 +233,7 @@ function M.setup(opts)
   vim.api.nvim_create_autocmd({ "BufReadPost" }, {
     group = group,
     callback = function()
-      local filepath = vim.fn.expand("%:p") 
+      local filepath = vim.fn.expand("%:p")
       -- cache_lookup(filepath, 1)
     end
   })
@@ -241,7 +241,7 @@ function M.setup(opts)
   vim.api.nvim_create_autocmd({ "BufDelete" }, {
     group = group,
     callback = function()
-      local filepath = vim.fn.expand("<afile>:p") 
+      local filepath = vim.fn.expand("<afile>:p")
       M.Cache[filepath] = nil
     end
   })
