@@ -20,11 +20,11 @@ local function parse_blame_info(output)
 
   while true do
     local new_line = string.find(output, "\n", current)
-    
-    if not new_line then 
-      break 
+
+    if not new_line then
+      break
     end
-    
+
     local line = string.sub(output, current, new_line - 1)
     -- print(string.format("line %d: \"%s\"", count, line))
     count = count + 1
@@ -50,7 +50,7 @@ local function parse_blame_info(output)
         error(line_number .. " is not a valid number")
       end
       
-      vim.cmd.echo(string.format('"Adding commit %s to %d"', existing_commit.hash, line_number))
+      -- vim.cmd.echo(string.format('"Adding commit %s to %d"', existing_commit.hash, line_number))
       lines[index] = existing_commit
 
       goto continue
@@ -109,14 +109,14 @@ M.Cache = {}
 local function cache_lookup(filepath, line_number)
   local entry = M.Cache[filepath]
   if not entry then
-    vim.cmd.echo(string.format('"cache miss: %s:%d"', filepath, line_number))
+    -- vim.cmd.echo(string.format('"cache miss: %s:%d"', filepath, line_number))
     entry = get_blame_info(filepath)
     if not entry then
       return nil
     end
     M.Cache[filepath] = entry
   else
-    vim.cmd.echo(string.format('"cache hit: %s:%d"', filepath, line_number))
+    -- vim.cmd.echo(string.format('"cache hit: %s:%d"', filepath, line_number))
   end
   return entry[line_number]
 end
