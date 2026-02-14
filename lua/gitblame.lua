@@ -89,13 +89,14 @@ local function parse_blame_info(output)
   return lines
 end
 
+
 local function get_blame_info(filepath)
   -- It is important to handle filepath being an empty string, because this case occurs with telescope :(
   if filepath == "" then
     return nil
   end
 
-  local handle = io.popen(string.format("git blame --porcelain %s", filepath))
+  local handle = io.popen(string.format("git blame --porcelain %s 2>/dev/null", filepath))
   if not handle then
     return nil
   end
@@ -138,23 +139,6 @@ local function format_commit(commit)
   formatted = formatted:gsub("%%h", commit.hash and string.sub(commit.hash, 1, 7) or "")
   -- print(formatted)
   return formatted
-end
-
--- Function to get git directory
-local function get_git_dir()
-  local handle = io.popen("git rev-parse --show-toplevel 2>/dev/null")
-  if not handle then
-    return nil
-  end
-
-  local git_dir = handle:read("*a"):gsub("%s+$", "")
-  handle:close()
-
-  if git_dir == "" then
-    return nil
-  end
-
-  return git_dir
 end
 
 -- get_blame_info("~/repos/v8/v8/src/objects/js-array.tq")
