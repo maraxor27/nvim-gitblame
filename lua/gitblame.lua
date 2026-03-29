@@ -32,7 +32,6 @@ local function parse_blame_info(output)
     local commit = string.match(line, "^(%x+) %d+ %d+")
     local line_number = string.match(line, "^%x+ %d+ (%d+)")
     if commit and line_number then
-
       local existing_commit = blame_info[commit]
 
       if not existing_commit then
@@ -122,8 +121,6 @@ M.Cache = {}
 local function cache_lookup(filepath, line_number)
   local entry = M.Cache[filepath]
   if not entry then
-    -- vim.cmd.echo(string.format('"cache miss: %s:%d"', filepath, line_number))
-
     entry = get_blame_info(filepath)
     if not entry then
       return nil
@@ -295,7 +292,6 @@ function M.setup(opts)
       clear_commit()
     end
   })
-
 
   vim.api.nvim_create_autocmd({ "BufDelete" }, {
     group = group,
