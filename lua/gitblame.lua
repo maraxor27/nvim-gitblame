@@ -20,24 +20,22 @@ local function parse_blame_info(output)
 
   while true do
     local new_line = string.find(output, "\n", current)
-    
-    if not new_line then 
-      break 
+
+    if not new_line then
+      break
     end
-    
+
     local line = string.sub(output, current, new_line - 1)
-    -- print(string.format("line %d: \"%s\"", count, line))
     count = count + 1
     current = new_line + 1
 
     local commit = string.match(line, "^(%x+) %d+ %d+")
     local line_number = string.match(line, "^%x+ %d+ (%d+)")
-    if commit and line_number then 
-      -- print(string.format("commit: %s @ %s", commit, line_number))
-      
+    if commit and line_number then
+
       local existing_commit = blame_info[commit]
 
-      if not existing_commit then 
+      if not existing_commit then
         existing_commit = {}
         existing_commit["hash"] = commit
         blame_info[commit] = existing_commit
@@ -49,8 +47,7 @@ local function parse_blame_info(output)
       if not index then
         error(line_number .. " is not a valid number")
       end
-      
-      vim.cmd.echo(string.format('"Adding commit %s to %d"', existing_commit.hash, line_number))
+
       lines[index] = existing_commit
 
       goto continue
@@ -58,29 +55,25 @@ local function parse_blame_info(output)
 
     local author = string.match(line, "^author (.+)")
     if author then
-      -- print(string.format("author: \"%s\"", author))
       current_commit["author"] = author
       goto continue
     end
 
     local author_mail = string.match(line, "^author%-mail %<(.+)%>")
-    if author_mail then 
-      -- print(string.format("author-mail: \"%s\"", author_mail))
+    if author_mail then
       current_commit["author_mail"] = author_mail
       goto continue
     end
-   
+
     local author_time = string.match(line, "^author%-time (%d+)")
     if author_time then
       local date = os.date(M.config.date_format, tonumber(author_time))
-      -- print(string.format("author_time: \"%s\"", date))
-      current_commit["author_time"] = date 
+      current_commit["author_time"] = date
       goto continue
     end
 
     local summary = string.match(line, "^summary (.+)")
     if summary then
-      -- print(string.format("summary: \"%s\"", summary))
       current_commit["summary"] = summary
       goto continue
     end
@@ -89,40 +82,64 @@ local function parse_blame_info(output)
   return lines
 end
 
-local function get_blame_info(filepath) 
+local function get_blame_info(filepath)
   -- It is important to handle filepath being an empty string, because this case occurs with telescope :(
   if filepath == "" then
     return nil
   end
 
-  local handle = io.popen(string.format("git blame --porcelain %s", filepath))
-  if not handle then
-    return nil
+  local gitblame_cache_entry = M.GitBlameCache[filepath]
+  if gitblame_cache_entry == "in-progress" then
+    return "processing"
+  elseif gitblame_cache_entry ~= nil then
+    return parse_blame_info(gitblame_cache_entry)
   end
 
-  local output = handle:read("*a")
-  -- vim.cmd.echo(string.format('"output: %s"', output))
-  return parse_blame_info(output)
+  M.GitBlameCache[filepath] = "in-progress"
+  -- Use vim.system (async) instead of io.popen for better handling
+  vim.system(
+    {"git", "blame", "--porcelain", filepath },
+    { text = true },
+    function (result)
+      -- Return on non zero return codes (failure)
+      if result.code ~= 0 then
+        print("git blame failure: " .. (result.stderr or "unknown issue"))
+        return
+      end
+      M.GitBlameCache[filepath] = result.stdout
+      vim.schedule(function()
+        vim.cmd("GitBlameClear")
+        vim.cmd("GitBlameShow")
+      end)
+    end
+  )
+
+  return "processing"
 end
 
+M.GitBlameCache = {}
 M.Cache = {}
 local function cache_lookup(filepath, line_number)
   local entry = M.Cache[filepath]
   if not entry then
-    vim.cmd.echo(string.format('"cache miss: %s:%d"', filepath, line_number))
+    -- vim.cmd.echo(string.format('"cache miss: %s:%d"', filepath, line_number))
+
     entry = get_blame_info(filepath)
     if not entry then
       return nil
+    elseif entry == "processing" then
+      return "..."
     end
+
     M.Cache[filepath] = entry
   else
-    vim.cmd.echo(string.format('"cache hit: %s:%d"', filepath, line_number))
+    -- vim.cmd.echo(string.format('"cache hit: %s:%d"', filepath, line_number))
   end
   return entry[line_number]
 end
 
 local function format_commit(commit)
-  if not commit then
+if not commit then
     return ""
   end
 
@@ -136,51 +153,31 @@ local function format_commit(commit)
   formatted = formatted:gsub("%%d", commit.author_time or "")
   formatted = formatted:gsub("%%m", msg)
   formatted = formatted:gsub("%%h", commit.hash and string.sub(commit.hash, 1, 7) or "")
-  print(formatted)
   return formatted
 end
 
--- Function to get git directory
-local function get_git_dir()
-  local handle = io.popen("git rev-parse --show-toplevel 2>/dev/null")
-  if not handle then
-    return nil
-  end
-
-  local git_dir = handle:read("*a"):gsub("%s+$", "")
-  handle:close()
-
-  if git_dir == "" then
-    return nil
-  end
-
-  return git_dir
-end
-
--- get_blame_info("~/repos/v8/v8/src/objects/js-array.tq")
---
 local ns_id = nil
 
 local function show_commit()
   vim.api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
-          
-  -- Get current buffer id 
-  local buffer_ID = vim.api.nvim_get_current_buf()
+
   -- Get cursor of current window
   local cursor = vim.api.nvim_win_get_cursor(CURRENT_WINDOW_ID)
   -- cursor = [row, col]
   local line_num = cursor[1]
 
-  local filepath = vim.fn.expand("%:p")   
-  local commit = cache_lookup(filepath, line_num) 
-  if not commit then 
-    -- vim.cmd.echo('"Couldn\'t find commit information"')
-    return
-  end
-  local formatted_text = format_commit(commit)
-  -- vim.cmd.echo(string.format('"blame: %s"', formatted_text))
+  local filepath = vim.fn.expand("%:p")
+  local commit = cache_lookup(filepath, line_num)
 
-  vim.api.nvim_buf_set_virtual_text(buffer_ID, ns_id, line_num - 1, { { formatted_text, M.config.hl_group } }, {})
+  local formatted_text
+  if not commit then
+    return
+  elseif commit == "..." then
+    formatted_text = commit
+  else
+    formatted_text = format_commit(commit)
+  end
+  vim.cmd("GitBlameWrite " .. formatted_text)
 end
 
 local auto_timer = nil
@@ -199,6 +196,73 @@ local function clear_commit()
   vim.api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
 end
 
+local function longest_line(lines)
+  local longest = ""
+  for _, line in ipairs(lines) do
+    if #line > #longest then
+      longest = line
+    end
+  end
+  return longest
+end
+
+local function open_floating_window(lines, opts)
+  opts = opts or {}
+
+  local buf = vim.api.nvim_create_buf(false, true) -- scratch buffer
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+  -- local width = opts.width or math.floor(vim.o.columns * 0.6)
+  -- local height = opts.height or math.floor(vim.o.lines * 0.6)
+
+  local width = #longest_line(lines)
+  local height = #lines
+
+  local win = vim.api.nvim_open_win(buf, false, {
+    relative = "cursor",
+    width = width,
+    height = height,
+    row = 1,
+    col = 1,
+    style = "minimal",
+    focusable = false,
+  })
+
+  return buf, win
+end
+
+local floating_window = nil
+
+local function make_gitblame_floating_window()
+  -- Get cursor of current window
+  local cursor = vim.api.nvim_win_get_cursor(CURRENT_WINDOW_ID)
+  -- cursor = [row, col]
+  local line_num = cursor[1]
+
+  local filepath = vim.fn.expand("%:p")
+  local commit = cache_lookup(filepath, line_num)
+
+  if commit == "..." or commit == nil then
+    print("No git blame information available for this line")
+    return
+  end
+
+  vim.system(
+    {"git", "show", "-s", "--format=full", commit.hash },
+    { text = true},
+    function(result)
+      if result.code ~= 0 then
+        print("git show failure: " .. (result.stderr or "unknown issue"))
+        return
+      end
+      vim.schedule(function()
+        local opts = { plain = true }
+        local lines = vim.split(result.stdout, "\n", opts)
+        _, floating_window =open_floating_window(lines, opts)
+      end)
+  end)
+end
+
 function M.setup(opts)
   -- Merge opts with config
   M.config = vim.tbl_deep_extend("force", M.config, opts or {})
@@ -208,10 +272,8 @@ function M.setup(opts)
     vim.api.nvim_set_hl(0, M.config.hl_group, { fg = "#888888", italic = true })
   end
 
-  -- vim.api.nvim.create_user_command("GitBlameShow", TODO, {})
-
   local group = vim.api.nvim_create_augroup("GitBlame", { clear = true })
- 
+
   vim.api.nvim_create_autocmd({ "CursorMoved" }, {
     group = group,
     callback = function()
@@ -220,30 +282,62 @@ function M.setup(opts)
 
       -- Start the timer for displaying a commit on the current line
       delay_show_commit()
+
+      if floating_window ~= nil and vim.api.nvim_win_is_valid(floating_window) then
+        vim.api.nvim_win_close(floating_window, true)
+      end
     end
   })
 
   vim.api.nvim_create_autocmd({ "InsertEnter", "BufLeave" }, {
     group = group,
-    callback = function() 
-      vim.api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
+    callback = function()
+      clear_commit()
     end
   })
 
-  vim.api.nvim_create_autocmd({ "BufReadPost" }, {
-    group = group,
-    callback = function()
-      local filepath = vim.fn.expand("%:p") 
-      -- cache_lookup(filepath, 1)
-    end
-  })
 
   vim.api.nvim_create_autocmd({ "BufDelete" }, {
     group = group,
     callback = function()
-      local filepath = vim.fn.expand("<afile>:p") 
+      local filepath = vim.fn.expand("<afile>:p")
       M.Cache[filepath] = nil
     end
+  })
+
+  vim.api.nvim_create_user_command("GitBlameWrite", function(event)
+    local buffer = event.args
+    -- Get current buffer id 
+    local buffer_ID = vim.api.nvim_get_current_buf()
+    -- Get cursor of current window
+    local cursor = vim.api.nvim_win_get_cursor(CURRENT_WINDOW_ID)
+    -- cursor = [row, col]
+    local line_num = cursor[1]
+
+    vim.api.nvim_buf_set_extmark(buffer_ID, ns_id, line_num - 1, 0,
+      { virt_text = { { buffer } },
+      virt_text_pos = "eol",
+    })
+  end, {
+    nargs = 1
+  })
+
+  vim.api.nvim_create_user_command("GitBlameShow", function()
+    show_commit()
+  end, {
+    nargs = 0
+  })
+
+  vim.api.nvim_create_user_command("GitBlameOpenFloatingWindow", function()
+    make_gitblame_floating_window()
+  end, {
+    nargs = 0
+  })
+
+  vim.api.nvim_create_user_command("GitBlameClear", function()
+    clear_commit()
+  end,{
+    nargs = 0
   })
 end
 
