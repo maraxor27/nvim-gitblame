@@ -207,6 +207,7 @@ local function open_floating_window(lines, opts)
   opts = opts or {}
 
   local buf = vim.api.nvim_create_buf(false, true) -- scratch buffer
+  vim.bo[buf].filetype = "gitshow"
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
   -- local width = opts.width or math.floor(vim.o.columns * 0.6)
