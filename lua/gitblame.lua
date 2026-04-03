@@ -8,7 +8,14 @@ M.config = {
   format = " %a | %d | %m (%h)",
   max_msg_len = 50,
   delay_show_commit = 500,
+  enabled = true, -- Enable/disable the plugin
 }
+
+local function has_git_repo()
+  local current_dir = vim.fn.getcwd()
+  local git_dir = vim.fn.finddir(".git", current_dir .. "/../.git")
+  return git_dir ~= ""
+end
 
 local function parse_blame_info(output)
   local lines = {}
@@ -270,6 +277,13 @@ function M.setup(opts)
     vim.api.nvim_set_hl(0, M.config.hl_group, { fg = "#888888", italic = true })
   end
 
+  -- Only enable autocmds if plugin is enabled and we're in a git repo
+  local should_enable = M.config.enabled and has_git_repo()
+
+  if not should_enable then
+    return
+  end
+
   local group = vim.api.nvim_create_augroup("GitBlame", { clear = true })
 
   vim.api.nvim_create_autocmd({ "CursorMoved" }, {
@@ -334,6 +348,20 @@ function M.setup(opts)
   vim.api.nvim_create_user_command("GitBlameClear", function()
     clear_commit()
   end,{
+    nargs = 0
+  })
+
+  -- Command to toggle plugin on/off
+  vim.api.nvim_create_user_command("GitBlameToggle", function()
+    M.config.enabled = not M.config.enabled
+    vim.notify(
+      ("Plugin %s (enabled: %s)"):format(
+        M.config.enabled and "ENABLED" or "DISABLED",
+        tostring(M.config.enabled)
+      ),
+      vim.log.levels.INFO
+    )
+  end, {
     nargs = 0
   })
 end
