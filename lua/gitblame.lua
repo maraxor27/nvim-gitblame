@@ -12,8 +12,7 @@ M.config = {
 }
 
 local function has_git_repo()
-  local current_dir = vim.fn.getcwd()
-  local git_dir = vim.fn.finddir(".git", current_dir .. "/../.git")
+  local git_dir = vim.fn.finddir(".git", ";")
   return git_dir ~= ""
 end
 
