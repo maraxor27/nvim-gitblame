@@ -101,9 +101,12 @@ local function get_blame_info(filepath)
   end
 
   M.GitBlameCache[filepath] = "in-progress"
+
   -- Use vim.system (async) instead of io.popen for better handling
+  local workdir = vim.fn.fnamemodify(filepath, ":p:h")
+  local filename = vim.fn.fnamemodify(filepath, ":t")
   vim.system(
-    {"git", "blame", "--porcelain", filepath },
+    {"git", "-C", workdir, "blame", "--porcelain", filename },
     { text = true },
     function (result)
       -- Return on non zero return codes (failure)
