@@ -111,7 +111,7 @@ local function get_blame_info(filepath)
     function (result)
       -- Return on non zero return codes (failure)
       if result.code ~= 0 then
-        print("git blame failure: " .. (result.stderr or "unknown issue"))
+        -- print("git blame failure: " .. (result.stderr or "unknown issue"))
         return
       end
       M.GitBlameCache[filepath] = result.stdout
