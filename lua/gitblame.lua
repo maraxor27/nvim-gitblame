@@ -199,6 +199,10 @@ local function delay_show_commit()
 end
 
 local function clear_commit()
+  if auto_timer then
+    vim.loop.timer_stop(auto_timer)
+  end
+
   vim.api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
 end
 
@@ -291,6 +295,10 @@ function M.setup(opts)
   vim.api.nvim_create_autocmd({ "CursorMoved" }, {
     group = group,
     callback = function()
+      if not M.config.enabled then
+        return
+      end
+
       -- Clear commit if one exists on another line
       clear_commit()
 
@@ -355,6 +363,11 @@ function M.setup(opts)
 
   -- Command to toggle plugin on/off
   vim.api.nvim_create_user_command("GitBlameToggle", function()
+    -- When toggling off, clear the commit 
+    if M.config.enabled then
+      clear_commit()
+    end
+
     M.config.enabled = not M.config.enabled
     vim.notify(
       ("Plugin %s (enabled: %s)"):format(
